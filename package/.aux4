@@ -1,0 +1,451 @@
+{
+  "scope": "community",
+  "name": "google-drive",
+  "version": "1.0.0",
+  "description": "Commands to interact with Google Drive using the Google Workspace CLI",
+  "license": "MIT",
+  "tags": [
+    "google",
+    "drive",
+    "google-workspace",
+    "gws",
+    "cli",
+    "files"
+  ],
+  "dependencies": [
+    "community/google-auth"
+  ],
+  "system": [
+    [
+      "test:gws --version",
+      "brew:googleworkspace-cli",
+      "npm:@googleworkspace/cli"
+    ]
+  ],
+  "profiles": [
+    {
+      "name": "main",
+      "commands": [
+        {
+          "name": "google",
+          "execute": [
+            "profile:google"
+          ],
+          "help": {
+            "text": "Google commands"
+          }
+        }
+      ]
+    },
+    {
+      "name": "google",
+      "commands": [
+        {
+          "name": "drive",
+          "execute": [
+            "profile:google:drive"
+          ],
+          "help": {
+            "text": "Google Drive commands"
+          }
+        }
+      ]
+    },
+    {
+      "name": "google:drive",
+      "commands": [
+        {
+          "name": "list",
+          "execute": [
+            "gws drive files list --params '{\"q\": \"'value(query)'\", \"fields\": \"files(id,name,mimeType,modifiedTime,size,webViewLink),nextPageToken\", \"pageSize\": 'value(pageSize)', \"orderBy\": \"'value(orderBy)'\"}'"
+          ],
+          "help": {
+            "text": "List files in Google Drive",
+            "variables": [
+              {
+                "name": "query",
+                "text": "Search query (e.g. name contains 'report')",
+                "default": "trashed = false"
+              },
+              {
+                "name": "pageSize",
+                "text": "Number of files to return",
+                "default": "20"
+              },
+              {
+                "name": "orderBy",
+                "text": "Sort order (e.g. modifiedTime desc, name)",
+                "default": "modifiedTime desc"
+              }
+            ]
+          }
+        },
+        {
+          "name": "id",
+          "execute": [
+            "${packageDir}/lib/resolve-path.sh value(name)"
+          ],
+          "help": {
+            "text": "Get the file ID by name or path",
+            "variables": [
+              {
+                "name": "name",
+                "text": "File name or path (e.g. report or folder/subfolder/report)",
+                "arg": true
+              }
+            ]
+          }
+        },
+        {
+          "name": "search",
+          "execute": [
+            "nout:printf '{\"q\": \"name contains \\\"'value(name)'\\\" and trashed = false\", \"fields\": \"files(id,name,mimeType,modifiedTime,webViewLink)\", \"pageSize\": 'value(pageSize)'}'",
+            "gws drive files list --params '${response}'"
+          ],
+          "help": {
+            "text": "Search files by name",
+            "variables": [
+              {
+                "name": "name",
+                "text": "File name to search for",
+                "arg": true
+              },
+              {
+                "name": "pageSize",
+                "text": "Number of results to return",
+                "default": "10"
+              }
+            ]
+          }
+        },
+        {
+          "name": "get",
+          "execute": [
+            "gws drive files get --params '{\"fileId\": \"'value(fileId)'\", \"fields\": \"id,name,mimeType,modifiedTime,size,webViewLink,parents,shared,owners\"}'"
+          ],
+          "help": {
+            "text": "Get file metadata by ID",
+            "variables": [
+              {
+                "name": "fileId",
+                "text": "File ID",
+                "arg": true
+              }
+            ]
+          }
+        },
+        {
+          "name": "copy",
+          "execute": [
+            "gws drive files copy --params '{\"fileId\": \"'value(fileId)'\"}' --json '{\"name\": \"'value(name)'\"}'"
+          ],
+          "help": {
+            "text": "Create a copy of a file",
+            "variables": [
+              {
+                "name": "fileId",
+                "text": "File ID to copy",
+                "arg": true
+              },
+              {
+                "name": "name",
+                "text": "Name for the copy"
+              }
+            ]
+          }
+        },
+        {
+          "name": "rename",
+          "execute": [
+            "gws drive files update --params '{\"fileId\": \"'value(fileId)'\"}' --json '{\"name\": \"'value(name)'\"}'"
+          ],
+          "help": {
+            "text": "Rename a file",
+            "variables": [
+              {
+                "name": "fileId",
+                "text": "File ID to rename",
+                "arg": true
+              },
+              {
+                "name": "name",
+                "text": "New name for the file",
+                "arg": true
+              }
+            ]
+          }
+        },
+        {
+          "name": "move",
+          "execute": [
+            "gws drive files update --params '{\"fileId\": \"'value(fileId)'\", \"addParents\": \"'value(folderId)'\", \"removeParents\": \"'value(fromFolderId)'\"}'"
+          ],
+          "help": {
+            "text": "Move a file to a different folder",
+            "variables": [
+              {
+                "name": "fileId",
+                "text": "File ID to move",
+                "arg": true
+              },
+              {
+                "name": "folderId",
+                "text": "Destination folder ID"
+              },
+              {
+                "name": "fromFolderId",
+                "text": "Source folder ID (leave empty to auto-detect)",
+                "default": ""
+              }
+            ]
+          }
+        },
+        {
+          "name": "delete",
+          "execute": [
+            "confirm:Are you sure you want to permanently delete this file?",
+            "gws drive files delete --params '{\"fileId\": \"'value(fileId)'\"}'"
+          ],
+          "help": {
+            "text": "Permanently delete a file",
+            "variables": [
+              {
+                "name": "fileId",
+                "text": "File ID to delete",
+                "arg": true
+              }
+            ]
+          }
+        },
+        {
+          "name": "trash",
+          "execute": [
+            "gws drive files update --params '{\"fileId\": \"'value(fileId)'\", \"fields\": \"id,name,mimeType,trashed\"}' --json '{\"trashed\": true}'"
+          ],
+          "help": {
+            "text": "Move a file to trash",
+            "variables": [
+              {
+                "name": "fileId",
+                "text": "File ID to trash",
+                "arg": true
+              }
+            ]
+          }
+        },
+        {
+          "name": "restore",
+          "execute": [
+            "gws drive files update --params '{\"fileId\": \"'value(fileId)'\", \"fields\": \"id,name,mimeType,trashed\"}' --json '{\"trashed\": false}'"
+          ],
+          "help": {
+            "text": "Restore a file from trash",
+            "variables": [
+              {
+                "name": "fileId",
+                "text": "File ID to restore",
+                "arg": true
+              }
+            ]
+          }
+        },
+        {
+          "name": "upload",
+          "execute": [
+            "gws drive +upload value(file) param(parent) param(name)"
+          ],
+          "help": {
+            "text": "Upload a file to Google Drive",
+            "variables": [
+              {
+                "name": "file",
+                "text": "Path to the local file to upload",
+                "arg": true
+              },
+              {
+                "name": "parent",
+                "text": "Parent folder ID",
+                "default": ""
+              },
+              {
+                "name": "name",
+                "text": "Target filename (defaults to source filename)",
+                "default": ""
+              }
+            ]
+          }
+        },
+        {
+          "name": "download",
+          "execute": [
+            "gws drive files download --params '{\"fileId\": \"'value(fileId)'\", \"alt\": \"media\"}' -o value(output)"
+          ],
+          "help": {
+            "text": "Download a file from Google Drive",
+            "variables": [
+              {
+                "name": "fileId",
+                "text": "File ID to download",
+                "arg": true
+              },
+              {
+                "name": "output",
+                "text": "Output file path",
+                "arg": true
+              }
+            ]
+          }
+        },
+        {
+          "name": "export",
+          "execute": [
+            "gws drive files export --params '{\"fileId\": \"'value(fileId)'\", \"mimeType\": \"'value(mimeType)'\"}' -o value(output)"
+          ],
+          "help": {
+            "text": "Export a Google Workspace document to a file",
+            "variables": [
+              {
+                "name": "fileId",
+                "text": "File ID to export",
+                "arg": true
+              },
+              {
+                "name": "output",
+                "text": "Output file path",
+                "arg": true
+              },
+              {
+                "name": "mimeType",
+                "text": "Export MIME type (e.g. application/pdf, text/csv)",
+                "default": "application/pdf",
+                "options": [
+                  "application/pdf",
+                  "text/csv",
+                  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                  "text/plain",
+                  "text/html"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "mkdir",
+          "execute": [
+            "gws drive files create --json '{\"name\": \"'value(name)'\", \"mimeType\": \"application/vnd.google-apps.folder\", \"parents\": [\"'value(parent)'\"]}'"
+          ],
+          "help": {
+            "text": "Create a folder in Google Drive",
+            "variables": [
+              {
+                "name": "name",
+                "text": "Folder name",
+                "arg": true
+              },
+              {
+                "name": "parent",
+                "text": "Parent folder ID (defaults to root)",
+                "default": "root"
+              }
+            ]
+          }
+        },
+        {
+          "name": "share",
+          "execute": [
+            "profile:google:drive:share"
+          ],
+          "help": {
+            "text": "Manage file sharing permissions"
+          }
+        }
+      ]
+    },
+    {
+      "name": "google:drive:share",
+      "commands": [
+        {
+          "name": "add",
+          "execute": [
+            "gws drive permissions create --params '{\"fileId\": \"'value(fileId)'\"}' --json '{\"role\": \"'value(role)'\", \"type\": \"'value(type)'\", \"emailAddress\": \"'value(email)'\"}'"
+          ],
+          "help": {
+            "text": "Share a file with a user or group",
+            "variables": [
+              {
+                "name": "fileId",
+                "text": "File ID to share",
+                "arg": true
+              },
+              {
+                "name": "email",
+                "text": "Email address to share with",
+                "arg": true
+              },
+              {
+                "name": "role",
+                "text": "Permission role",
+                "default": "reader",
+                "options": [
+                  "reader",
+                  "commenter",
+                  "writer",
+                  "organizer"
+                ]
+              },
+              {
+                "name": "type",
+                "text": "Permission type",
+                "default": "user",
+                "options": [
+                  "user",
+                  "group",
+                  "domain",
+                  "anyone"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "list",
+          "execute": [
+            "gws drive permissions list --params '{\"fileId\": \"'value(fileId)'\", \"fields\": \"permissions(id,role,type,emailAddress,displayName)\"}'"
+          ],
+          "help": {
+            "text": "List sharing permissions for a file",
+            "variables": [
+              {
+                "name": "fileId",
+                "text": "File ID",
+                "arg": true
+              }
+            ]
+          }
+        },
+        {
+          "name": "remove",
+          "execute": [
+            "gws drive permissions delete --params '{\"fileId\": \"'value(fileId)'\", \"permissionId\": \"'value(permissionId)'\"}'"
+          ],
+          "help": {
+            "text": "Remove a sharing permission from a file",
+            "variables": [
+              {
+                "name": "fileId",
+                "text": "File ID",
+                "arg": true
+              },
+              {
+                "name": "permissionId",
+                "text": "Permission ID to remove",
+                "arg": true
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
