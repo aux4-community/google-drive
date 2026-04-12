@@ -1,7 +1,7 @@
 {
   "scope": "community",
   "name": "google-drive",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Commands to interact with Google Drive using the Google Workspace CLI",
   "license": "MIT",
   "tags": [
