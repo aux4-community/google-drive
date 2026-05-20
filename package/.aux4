@@ -55,6 +55,16 @@
       "name": "google:drive",
       "commands": [
         {
+          "name": "services",
+          "private": true,
+          "execute": [
+            "echo '{\"name\":\"drive\",\"scope\":\"https://www.googleapis.com/auth/drive\",\"description\":\"Manage files, folders, and shared drives\"}'"
+          ],
+          "help": {
+            "text": "Output service metadata for auth resolution"
+          }
+        },
+        {
           "name": "list",
           "execute": [
             "gws drive files list --params '{\"q\": \"'value(query)'\", \"fields\": \"files(id,name,mimeType,modifiedTime,size,webViewLink),nextPageToken\", \"pageSize\": 'value(pageSize)', \"orderBy\": \"'value(orderBy)'\"}'"
