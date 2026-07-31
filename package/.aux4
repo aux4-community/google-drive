@@ -1,7 +1,7 @@
 {
   "scope": "community",
   "name": "google-drive",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Commands to interact with Google Drive using the Drive v3 REST API",
   "license": "MIT",
   "tags": [
