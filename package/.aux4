@@ -1,25 +1,31 @@
 {
   "scope": "community",
   "name": "google-drive",
-  "version": "1.0.1",
-  "description": "Commands to interact with Google Drive using the Google Workspace CLI",
+  "version": "1.1.0",
+  "description": "Commands to interact with Google Drive using the Drive v3 REST API",
   "license": "MIT",
   "tags": [
     "google",
     "drive",
     "google-workspace",
-    "gws",
+    "rest",
     "cli",
     "files"
   ],
   "dependencies": [
-    "community/google-auth"
+    "community/google-auth",
+    "aux4/curl"
   ],
   "system": [
     [
-      "test:gws --version",
-      "brew:googleworkspace-cli",
-      "npm:@googleworkspace/cli"
+      "test:jq --version",
+      "brew:jq",
+      "linux:jq"
+    ],
+    [
+      "test:file --version",
+      "brew:file-formula",
+      "linux:file"
     ]
   ],
   "profiles": [
@@ -58,7 +64,7 @@
           "name": "services",
           "private": true,
           "execute": [
-            "echo '{\"name\":\"drive\",\"scope\":\"https://www.googleapis.com/auth/drive\",\"description\":\"Manage files, folders, and shared drives\"}'"
+            "echo '{\"name\":\"drive\",\"scope\":\"https://www.googleapis.com/auth/drive\",\"readonlyScope\":\"https://www.googleapis.com/auth/drive.readonly\",\"description\":\"Manage files, folders, and shared drives\"}'"
           ],
           "help": {
             "text": "Output service metadata for auth resolution"
@@ -67,7 +73,10 @@
         {
           "name": "list",
           "execute": [
-            "gws drive files list --params '{\"q\": \"'value(query)'\", \"fields\": \"files(id,name,mimeType,modifiedTime,size,webViewLink),nextPageToken\", \"pageSize\": 'value(pageSize)', \"orderBy\": \"'value(orderBy)'\"}'"
+            "json:DRIVE_QUERY=value(query) DRIVE_ORDER_BY=value(orderBy) jq -nc '{query: (env.DRIVE_QUERY | @uri), orderBy: (env.DRIVE_ORDER_BY | @uri)}'",
+            "set:encoded=$response",
+            "set:requestUrl=${apiUrl}/files?q=${encoded.query}&fields=files(id,name,mimeType,modifiedTime,size,webViewLink),nextPageToken&pageSize=${pageSize}&orderBy=${encoded.orderBy}",
+            "aux4 curl auth-request --provider google param(tokenFile) --url value(requestUrl)"
           ],
           "help": {
             "text": "List files in Google Drive",
@@ -86,22 +95,18 @@
                 "name": "orderBy",
                 "text": "Sort order (e.g. modifiedTime desc, name)",
                 "default": "modifiedTime desc"
-              }
-            ]
-          }
-        },
-        {
-          "name": "id",
-          "execute": [
-            "${packageDir}/lib/resolve-path.sh value(name)"
-          ],
-          "help": {
-            "text": "Get the file ID by name or path",
-            "variables": [
+              },
               {
-                "name": "name",
-                "text": "File name or path (e.g. report or folder/subfolder/report)",
-                "arg": true
+                "name": "tokenFile",
+                "text": "Where the OAuth token is stored",
+                "default": "${aux4HomeDir}/.oauth/google.json",
+                "env": "AUX4_GOOGLE_TOKEN_FILE"
+              },
+              {
+                "name": "apiUrl",
+                "text": "Drive API base URL",
+                "default": "https://www.googleapis.com/drive/v3",
+                "private": true
               }
             ]
           }
@@ -109,8 +114,10 @@
         {
           "name": "search",
           "execute": [
-            "nout:printf '{\"q\": \"name contains \\\"'value(name)'\\\" and trashed = false\", \"fields\": \"files(id,name,mimeType,modifiedTime,webViewLink)\", \"pageSize\": 'value(pageSize)'}'",
-            "gws drive files list --params '${response}'"
+            "nout:DRIVE_NAME=value(name) DRIVE_QUOTE=\"'\" jq -rn '(\"name contains \" + env.DRIVE_QUOTE + (env.DRIVE_NAME | gsub(env.DRIVE_QUOTE; \"\\\\\" + env.DRIVE_QUOTE)) + env.DRIVE_QUOTE + \" and trashed = false\") | @uri'",
+            "set:encodedQuery=$response",
+            "set:requestUrl=${apiUrl}/files?q=${encodedQuery}&fields=files(id,name,mimeType,modifiedTime,webViewLink)&pageSize=${pageSize}",
+            "aux4 curl auth-request --provider google param(tokenFile) --url value(requestUrl)"
           ],
           "help": {
             "text": "Search files by name",
@@ -124,6 +131,99 @@
                 "name": "pageSize",
                 "text": "Number of results to return",
                 "default": "10"
+              },
+              {
+                "name": "tokenFile",
+                "text": "Where the OAuth token is stored",
+                "default": "${aux4HomeDir}/.oauth/google.json",
+                "env": "AUX4_GOOGLE_TOKEN_FILE"
+              },
+              {
+                "name": "apiUrl",
+                "text": "Drive API base URL",
+                "default": "https://www.googleapis.com/drive/v3",
+                "private": true
+              }
+            ]
+          }
+        },
+        {
+          "name": "id",
+          "execute": [
+            "json:DRIVE_PATH=value(name) jq -nc 'env.DRIVE_PATH | split(\"/\") | map(select(. != \"\")) | {head: .[0], tail: (.[1:] | join(\"/\"))}'",
+            "set:segment=$response",
+            "when:${segment.head}==:exit:1:A file name or path is required.",
+            "when:${segment.tail}==:aux4 google drive resolve value(name) param(tokenFile) --apiUrl value(apiUrl)",
+            "when:${segment.tail}!=:aux4 google drive resolve value(name) --parent root param(tokenFile) --apiUrl value(apiUrl)"
+          ],
+          "help": {
+            "text": "Get the file ID by name or path",
+            "variables": [
+              {
+                "name": "name",
+                "text": "File name or path (e.g. report or folder/subfolder/report)",
+                "arg": true
+              },
+              {
+                "name": "tokenFile",
+                "text": "Where the OAuth token is stored",
+                "default": "${aux4HomeDir}/.oauth/google.json",
+                "env": "AUX4_GOOGLE_TOKEN_FILE"
+              },
+              {
+                "name": "apiUrl",
+                "text": "Drive API base URL",
+                "default": "https://www.googleapis.com/drive/v3",
+                "private": true
+              }
+            ]
+          }
+        },
+        {
+          "name": "resolve",
+          "private": true,
+          "execute": [
+            "json:DRIVE_PATH=value(path) jq -nc 'env.DRIVE_PATH | split(\"/\") | map(select(. != \"\")) | {head: .[0], tail: (.[1:] | join(\"/\"))}'",
+            "set:segment=$response",
+            "when:${segment.head}==:exit:1:A file name or path is required.",
+            "set:parentClause=",
+            "when:${parent}!=:set:parentClause='${parent}' in parents",
+            "set:typeClause=",
+            "when:${segment.tail}!=:set:typeClause=mimeType = 'application/vnd.google-apps.folder'",
+            "nout:DRIVE_NAME=value(segment.head) DRIVE_PARENT_CLAUSE=value(parentClause) DRIVE_TYPE_CLAUSE=value(typeClause) DRIVE_QUOTE=\"'\" jq -rn '[(\"name = \" + env.DRIVE_QUOTE + (env.DRIVE_NAME | gsub(env.DRIVE_QUOTE; \"\\\\\" + env.DRIVE_QUOTE)) + env.DRIVE_QUOTE), env.DRIVE_PARENT_CLAUSE, env.DRIVE_TYPE_CLAUSE, \"trashed = false\"] | map(select(. != \"\")) | join(\" and \") | @uri'",
+            "set:encodedQuery=$response",
+            "set:requestUrl=${apiUrl}/files?q=${encodedQuery}&fields=files(id)&pageSize=1",
+            "nout:aux4 curl auth-request --provider google param(tokenFile) --url value(requestUrl)",
+            "set:matches=$response",
+            "set:foundId=!DRIVE_MATCHES=value(matches) jq -rn 'env.DRIVE_MATCHES | fromjson | .files[0].id // empty'",
+            "when:${foundId}==:exit:1:not found: ${segment.head}",
+            "when:${segment.tail}==:log:${foundId}",
+            "when:${segment.tail}!=:aux4 google drive resolve value(segment.tail) --parent value(foundId) param(tokenFile) --apiUrl value(apiUrl)"
+          ],
+          "help": {
+            "text": "Resolve one path segment at a time to a file ID",
+            "variables": [
+              {
+                "name": "path",
+                "text": "Remaining path to resolve",
+                "arg": true
+              },
+              {
+                "name": "parent",
+                "text": "Folder ID the next segment must live in (empty searches the whole Drive)",
+                "default": ""
+              },
+              {
+                "name": "tokenFile",
+                "text": "Where the OAuth token is stored",
+                "default": "${aux4HomeDir}/.oauth/google.json",
+                "env": "AUX4_GOOGLE_TOKEN_FILE"
+              },
+              {
+                "name": "apiUrl",
+                "text": "Drive API base URL",
+                "default": "https://www.googleapis.com/drive/v3",
+                "private": true
               }
             ]
           }
@@ -131,7 +231,8 @@
         {
           "name": "get",
           "execute": [
-            "gws drive files get --params '{\"fileId\": \"'value(fileId)'\", \"fields\": \"id,name,mimeType,modifiedTime,size,webViewLink,parents,shared,owners\"}'"
+            "set:requestUrl=${apiUrl}/files/${fileId}?fields=id,name,mimeType,modifiedTime,size,webViewLink,parents,shared,owners",
+            "aux4 curl auth-request --provider google param(tokenFile) --url value(requestUrl)"
           ],
           "help": {
             "text": "Get file metadata by ID",
@@ -140,6 +241,18 @@
                 "name": "fileId",
                 "text": "File ID",
                 "arg": true
+              },
+              {
+                "name": "tokenFile",
+                "text": "Where the OAuth token is stored",
+                "default": "${aux4HomeDir}/.oauth/google.json",
+                "env": "AUX4_GOOGLE_TOKEN_FILE"
+              },
+              {
+                "name": "apiUrl",
+                "text": "Drive API base URL",
+                "default": "https://www.googleapis.com/drive/v3",
+                "private": true
               }
             ]
           }
@@ -147,7 +260,9 @@
         {
           "name": "copy",
           "execute": [
-            "gws drive files copy --params '{\"fileId\": \"'value(fileId)'\"}' --json '{\"name\": \"'value(name)'\"}'"
+            "set:requestUrl=${apiUrl}/files/${fileId}/copy",
+            "set:requestBody=object(name)",
+            "aux4 curl auth-request --provider google param(tokenFile) --method POST --url value(requestUrl) --header 'Content-Type: application/json' --body value(requestBody)"
           ],
           "help": {
             "text": "Create a copy of a file",
@@ -160,6 +275,18 @@
               {
                 "name": "name",
                 "text": "Name for the copy"
+              },
+              {
+                "name": "tokenFile",
+                "text": "Where the OAuth token is stored",
+                "default": "${aux4HomeDir}/.oauth/google.json",
+                "env": "AUX4_GOOGLE_TOKEN_FILE"
+              },
+              {
+                "name": "apiUrl",
+                "text": "Drive API base URL",
+                "default": "https://www.googleapis.com/drive/v3",
+                "private": true
               }
             ]
           }
@@ -167,7 +294,9 @@
         {
           "name": "rename",
           "execute": [
-            "gws drive files update --params '{\"fileId\": \"'value(fileId)'\"}' --json '{\"name\": \"'value(name)'\"}'"
+            "set:requestUrl=${apiUrl}/files/${fileId}",
+            "set:requestBody=object(name)",
+            "aux4 curl auth-request --provider google param(tokenFile) --method PATCH --url value(requestUrl) --header 'Content-Type: application/json' --body value(requestBody)"
           ],
           "help": {
             "text": "Rename a file",
@@ -179,8 +308,19 @@
               },
               {
                 "name": "name",
-                "text": "New name for the file",
-                "arg": true
+                "text": "New name for the file"
+              },
+              {
+                "name": "tokenFile",
+                "text": "Where the OAuth token is stored",
+                "default": "${aux4HomeDir}/.oauth/google.json",
+                "env": "AUX4_GOOGLE_TOKEN_FILE"
+              },
+              {
+                "name": "apiUrl",
+                "text": "Drive API base URL",
+                "default": "https://www.googleapis.com/drive/v3",
+                "private": true
               }
             ]
           }
@@ -188,7 +328,9 @@
         {
           "name": "move",
           "execute": [
-            "gws drive files update --params '{\"fileId\": \"'value(fileId)'\", \"addParents\": \"'value(folderId)'\", \"removeParents\": \"'value(fromFolderId)'\"}'"
+            "set:requestUrl=${apiUrl}/files/${fileId}?addParents=${folderId}",
+            "when:${fromFolderId}!=:set:requestUrl=${apiUrl}/files/${fileId}?addParents=${folderId}&removeParents=${fromFolderId}",
+            "aux4 curl auth-request --provider google param(tokenFile) --method PATCH --url value(requestUrl)"
           ],
           "help": {
             "text": "Move a file to a different folder",
@@ -204,8 +346,20 @@
               },
               {
                 "name": "fromFolderId",
-                "text": "Source folder ID (leave empty to auto-detect)",
+                "text": "Folder ID to remove the file from (optional, Drive replaces the single existing parent anyway)",
                 "default": ""
+              },
+              {
+                "name": "tokenFile",
+                "text": "Where the OAuth token is stored",
+                "default": "${aux4HomeDir}/.oauth/google.json",
+                "env": "AUX4_GOOGLE_TOKEN_FILE"
+              },
+              {
+                "name": "apiUrl",
+                "text": "Drive API base URL",
+                "default": "https://www.googleapis.com/drive/v3",
+                "private": true
               }
             ]
           }
@@ -214,7 +368,9 @@
           "name": "delete",
           "execute": [
             "confirm:Are you sure you want to permanently delete this file?",
-            "gws drive files delete --params '{\"fileId\": \"'value(fileId)'\"}'"
+            "set:requestUrl=${apiUrl}/files/${fileId}",
+            "aux4 curl auth-request --provider google param(tokenFile) --method DELETE --url value(requestUrl)",
+            "log:Permanently deleted ${fileId}"
           ],
           "help": {
             "text": "Permanently delete a file",
@@ -223,6 +379,18 @@
                 "name": "fileId",
                 "text": "File ID to delete",
                 "arg": true
+              },
+              {
+                "name": "tokenFile",
+                "text": "Where the OAuth token is stored",
+                "default": "${aux4HomeDir}/.oauth/google.json",
+                "env": "AUX4_GOOGLE_TOKEN_FILE"
+              },
+              {
+                "name": "apiUrl",
+                "text": "Drive API base URL",
+                "default": "https://www.googleapis.com/drive/v3",
+                "private": true
               }
             ]
           }
@@ -230,7 +398,8 @@
         {
           "name": "trash",
           "execute": [
-            "gws drive files update --params '{\"fileId\": \"'value(fileId)'\", \"fields\": \"id,name,mimeType,trashed\"}' --json '{\"trashed\": true}'"
+            "set:requestUrl=${apiUrl}/files/${fileId}?fields=id,name,mimeType,trashed",
+            "aux4 curl auth-request --provider google param(tokenFile) --method PATCH --url value(requestUrl) --header 'Content-Type: application/json' --body '{\"trashed\": true}'"
           ],
           "help": {
             "text": "Move a file to trash",
@@ -239,6 +408,18 @@
                 "name": "fileId",
                 "text": "File ID to trash",
                 "arg": true
+              },
+              {
+                "name": "tokenFile",
+                "text": "Where the OAuth token is stored",
+                "default": "${aux4HomeDir}/.oauth/google.json",
+                "env": "AUX4_GOOGLE_TOKEN_FILE"
+              },
+              {
+                "name": "apiUrl",
+                "text": "Drive API base URL",
+                "default": "https://www.googleapis.com/drive/v3",
+                "private": true
               }
             ]
           }
@@ -246,7 +427,8 @@
         {
           "name": "restore",
           "execute": [
-            "gws drive files update --params '{\"fileId\": \"'value(fileId)'\", \"fields\": \"id,name,mimeType,trashed\"}' --json '{\"trashed\": false}'"
+            "set:requestUrl=${apiUrl}/files/${fileId}?fields=id,name,mimeType,trashed",
+            "aux4 curl auth-request --provider google param(tokenFile) --method PATCH --url value(requestUrl) --header 'Content-Type: application/json' --body '{\"trashed\": false}'"
           ],
           "help": {
             "text": "Restore a file from trash",
@@ -255,6 +437,18 @@
                 "name": "fileId",
                 "text": "File ID to restore",
                 "arg": true
+              },
+              {
+                "name": "tokenFile",
+                "text": "Where the OAuth token is stored",
+                "default": "${aux4HomeDir}/.oauth/google.json",
+                "env": "AUX4_GOOGLE_TOKEN_FILE"
+              },
+              {
+                "name": "apiUrl",
+                "text": "Drive API base URL",
+                "default": "https://www.googleapis.com/drive/v3",
+                "private": true
               }
             ]
           }
@@ -262,7 +456,21 @@
         {
           "name": "upload",
           "execute": [
-            "gws drive +upload value(file) param(parent) param(name)"
+            "# The existence check comes first because `file` reports a missing path on stdout, which would end up in the Content-Type header.",
+            "nout:ls value(file)",
+            "set:sourceName=!basename value(file)",
+            "set:targetName=nvl(name, sourceName)",
+            "when:${mimeType}==:set:mimeType=!file --mime-type -b value(file)",
+            "set:contentTypeHeader=Content-Type: ${mimeType}",
+            "set:uploadRequestPath=/files?uploadType=media&fields=id,name",
+            "set:uploadRequestUrl=${uploadApiUrl}${uploadRequestPath}",
+            "json:aux4 curl auth-request --provider google param(tokenFile) --method POST --url value(uploadRequestUrl) --header value(contentTypeHeader) --bodyFile value(file)",
+            "set:uploaded=$response",
+            "when:${uploaded.id}==:exit:1:The upload did not return a file id.",
+            "set:metadataRequestUrl=${apiUrl}/files/${uploaded.id}?fields=id,name,mimeType,parents,webViewLink",
+            "when:${parent}!=:set:metadataRequestUrl=${apiUrl}/files/${uploaded.id}?addParents=${parent}&fields=id,name,mimeType,parents,webViewLink",
+            "set:requestBody=object(targetName:name)",
+            "aux4 curl auth-request --provider google param(tokenFile) --method PATCH --url value(metadataRequestUrl) --header 'Content-Type: application/json' --body value(requestBody)"
           ],
           "help": {
             "text": "Upload a file to Google Drive",
@@ -281,6 +489,29 @@
                 "name": "name",
                 "text": "Target filename (defaults to source filename)",
                 "default": ""
+              },
+              {
+                "name": "mimeType",
+                "text": "Content type of the upload (detected from the file when empty)",
+                "default": ""
+              },
+              {
+                "name": "tokenFile",
+                "text": "Where the OAuth token is stored",
+                "default": "${aux4HomeDir}/.oauth/google.json",
+                "env": "AUX4_GOOGLE_TOKEN_FILE"
+              },
+              {
+                "name": "apiUrl",
+                "text": "Drive API base URL",
+                "default": "https://www.googleapis.com/drive/v3",
+                "private": true
+              },
+              {
+                "name": "uploadApiUrl",
+                "text": "Drive upload API base URL",
+                "default": "https://www.googleapis.com/upload/drive/v3",
+                "private": true
               }
             ]
           }
@@ -288,7 +519,9 @@
         {
           "name": "download",
           "execute": [
-            "gws drive files download --params '{\"fileId\": \"'value(fileId)'\", \"alt\": \"media\"}' -o value(output)"
+            "set:requestUrl=${apiUrl}/files/${fileId}?alt=media",
+            "aux4 curl auth-request --provider google param(tokenFile) --url value(requestUrl) --output value(output)",
+            "log:Saved ${output}"
           ],
           "help": {
             "text": "Download a file from Google Drive",
@@ -300,8 +533,19 @@
               },
               {
                 "name": "output",
-                "text": "Output file path",
-                "arg": true
+                "text": "Output file path"
+              },
+              {
+                "name": "tokenFile",
+                "text": "Where the OAuth token is stored",
+                "default": "${aux4HomeDir}/.oauth/google.json",
+                "env": "AUX4_GOOGLE_TOKEN_FILE"
+              },
+              {
+                "name": "apiUrl",
+                "text": "Drive API base URL",
+                "default": "https://www.googleapis.com/drive/v3",
+                "private": true
               }
             ]
           }
@@ -309,7 +553,11 @@
         {
           "name": "export",
           "execute": [
-            "gws drive files export --params '{\"fileId\": \"'value(fileId)'\", \"mimeType\": \"'value(mimeType)'\"}' -o value(output)"
+            "nout:DRIVE_MIME_TYPE=value(mimeType) jq -rn 'env.DRIVE_MIME_TYPE | @uri'",
+            "set:encodedMimeType=$response",
+            "set:requestUrl=${apiUrl}/files/${fileId}/export?mimeType=${encodedMimeType}",
+            "aux4 curl auth-request --provider google param(tokenFile) --url value(requestUrl) --output value(output)",
+            "log:Saved ${output}"
           ],
           "help": {
             "text": "Export a Google Workspace document to a file",
@@ -321,8 +569,7 @@
               },
               {
                 "name": "output",
-                "text": "Output file path",
-                "arg": true
+                "text": "Output file path"
               },
               {
                 "name": "mimeType",
@@ -336,6 +583,18 @@
                   "text/plain",
                   "text/html"
                 ]
+              },
+              {
+                "name": "tokenFile",
+                "text": "Where the OAuth token is stored",
+                "default": "${aux4HomeDir}/.oauth/google.json",
+                "env": "AUX4_GOOGLE_TOKEN_FILE"
+              },
+              {
+                "name": "apiUrl",
+                "text": "Drive API base URL",
+                "default": "https://www.googleapis.com/drive/v3",
+                "private": true
               }
             ]
           }
@@ -343,7 +602,11 @@
         {
           "name": "mkdir",
           "execute": [
-            "gws drive files create --json '{\"name\": \"'value(name)'\", \"mimeType\": \"application/vnd.google-apps.folder\", \"parents\": [\"'value(parent)'\"]}'"
+            "nout:DRIVE_NAME=value(name) DRIVE_PARENT=value(parent) jq -nc '{name: env.DRIVE_NAME, mimeType: \"application/vnd.google-apps.folder\", parents: [env.DRIVE_PARENT]}'",
+            "set:requestBody=$response",
+            "set:requestPath=/files",
+            "set:requestUrl=${apiUrl}${requestPath}",
+            "aux4 curl auth-request --provider google param(tokenFile) --method POST --url value(requestUrl) --header 'Content-Type: application/json' --body value(requestBody)"
           ],
           "help": {
             "text": "Create a folder in Google Drive",
@@ -357,6 +620,18 @@
                 "name": "parent",
                 "text": "Parent folder ID (defaults to root)",
                 "default": "root"
+              },
+              {
+                "name": "tokenFile",
+                "text": "Where the OAuth token is stored",
+                "default": "${aux4HomeDir}/.oauth/google.json",
+                "env": "AUX4_GOOGLE_TOKEN_FILE"
+              },
+              {
+                "name": "apiUrl",
+                "text": "Drive API base URL",
+                "default": "https://www.googleapis.com/drive/v3",
+                "private": true
               }
             ]
           }
@@ -378,7 +653,9 @@
         {
           "name": "add",
           "execute": [
-            "gws drive permissions create --params '{\"fileId\": \"'value(fileId)'\"}' --json '{\"role\": \"'value(role)'\", \"type\": \"'value(type)'\", \"emailAddress\": \"'value(email)'\"}'"
+            "set:requestUrl=${apiUrl}/files/${fileId}/permissions",
+            "set:requestBody=object(role, type, email:emailAddress)",
+            "aux4 curl auth-request --provider google param(tokenFile) --method POST --url value(requestUrl) --header 'Content-Type: application/json' --body value(requestBody)"
           ],
           "help": {
             "text": "Share a file with a user or group",
@@ -390,8 +667,7 @@
               },
               {
                 "name": "email",
-                "text": "Email address to share with",
-                "arg": true
+                "text": "Email address to share with"
               },
               {
                 "name": "role",
@@ -414,6 +690,18 @@
                   "domain",
                   "anyone"
                 ]
+              },
+              {
+                "name": "tokenFile",
+                "text": "Where the OAuth token is stored",
+                "default": "${aux4HomeDir}/.oauth/google.json",
+                "env": "AUX4_GOOGLE_TOKEN_FILE"
+              },
+              {
+                "name": "apiUrl",
+                "text": "Drive API base URL",
+                "default": "https://www.googleapis.com/drive/v3",
+                "private": true
               }
             ]
           }
@@ -421,7 +709,8 @@
         {
           "name": "list",
           "execute": [
-            "gws drive permissions list --params '{\"fileId\": \"'value(fileId)'\", \"fields\": \"permissions(id,role,type,emailAddress,displayName)\"}'"
+            "set:requestUrl=${apiUrl}/files/${fileId}/permissions?fields=permissions(id,role,type,emailAddress,displayName)",
+            "aux4 curl auth-request --provider google param(tokenFile) --url value(requestUrl)"
           ],
           "help": {
             "text": "List sharing permissions for a file",
@@ -430,6 +719,18 @@
                 "name": "fileId",
                 "text": "File ID",
                 "arg": true
+              },
+              {
+                "name": "tokenFile",
+                "text": "Where the OAuth token is stored",
+                "default": "${aux4HomeDir}/.oauth/google.json",
+                "env": "AUX4_GOOGLE_TOKEN_FILE"
+              },
+              {
+                "name": "apiUrl",
+                "text": "Drive API base URL",
+                "default": "https://www.googleapis.com/drive/v3",
+                "private": true
               }
             ]
           }
@@ -437,7 +738,9 @@
         {
           "name": "remove",
           "execute": [
-            "gws drive permissions delete --params '{\"fileId\": \"'value(fileId)'\", \"permissionId\": \"'value(permissionId)'\"}'"
+            "set:requestUrl=${apiUrl}/files/${fileId}/permissions/${permissionId}",
+            "aux4 curl auth-request --provider google param(tokenFile) --method DELETE --url value(requestUrl)",
+            "log:Removed permission ${permissionId} from ${fileId}"
           ],
           "help": {
             "text": "Remove a sharing permission from a file",
@@ -449,8 +752,19 @@
               },
               {
                 "name": "permissionId",
-                "text": "Permission ID to remove",
-                "arg": true
+                "text": "Permission ID to remove"
+              },
+              {
+                "name": "tokenFile",
+                "text": "Where the OAuth token is stored",
+                "default": "${aux4HomeDir}/.oauth/google.json",
+                "env": "AUX4_GOOGLE_TOKEN_FILE"
+              },
+              {
+                "name": "apiUrl",
+                "text": "Drive API base URL",
+                "default": "https://www.googleapis.com/drive/v3",
+                "private": true
               }
             ]
           }

@@ -1,14 +1,17 @@
 #### Description
 
-The `list` command shows all sharing permissions for a file, including the permission ID, role, type, email address, and display name for each entry.
+The `list` command shows all sharing permissions of a file, including the
+permission ID, role, type, email address and display name of each entry. The
+permission ID is what `aux4 google drive share remove` needs.
 
 #### Usage
 
 ```bash
-aux4 google drive share list <fileId>
+aux4 google drive share list <fileId> [--tokenFile <path>]
 ```
 
-fileId  The file ID (positional argument)
+fileId       The file ID (positional argument)
+--tokenFile  Where the OAuth token is stored (default: `~/.aux4.config/.oauth/google.json`)
 
 #### Example
 

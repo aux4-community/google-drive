@@ -1,20 +1,22 @@
 #### Description
 
-The `rename` command changes the name of a file in Google Drive. The file stays in the same location.
+The `rename` command changes the name of a file in Google Drive. The file stays in
+the same folder.
 
 #### Usage
 
 ```bash
-aux4 google drive rename <fileId> <name>
+aux4 google drive rename <fileId> --name <name> [--tokenFile <path>]
 ```
 
-fileId  The file ID to rename (positional argument)
-name    New name for the file (positional argument)
+fileId       The file ID to rename (positional argument)
+--name       New name for the file
+--tokenFile  Where the OAuth token is stored (default: `~/.aux4.config/.oauth/google.json`)
 
 #### Example
 
 ```bash
-aux4 google drive rename 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms "Q1 Budget Final"
+aux4 google drive rename 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms --name "Q1 Budget Final"
 ```
 
 ```text

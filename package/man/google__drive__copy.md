@@ -1,15 +1,17 @@
 #### Description
 
-The `copy` command creates a copy of a file in Google Drive. The copy is placed in the same folder as the original. You must provide a name for the copy via the `--name` flag.
+The `copy` command creates a copy of a file in Google Drive. The copy is placed in
+the same folder as the original. Provide a name for the copy with `--name`.
 
 #### Usage
 
 ```bash
-aux4 google drive copy <fileId> --name <name>
+aux4 google drive copy <fileId> --name <name> [--tokenFile <path>]
 ```
 
-fileId  The file ID to copy (positional argument)
---name  Name for the copy
+fileId       The file ID to copy (positional argument)
+--name       Name for the copy
+--tokenFile  Where the OAuth token is stored (default: `~/.aux4.config/.oauth/google.json`)
 
 #### Example
 

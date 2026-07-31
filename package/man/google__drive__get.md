@@ -1,14 +1,17 @@
 #### Description
 
-The `get` command retrieves detailed metadata for a file by its ID. The response includes the file name, MIME type, modification time, size, web link, parent folders, sharing status, and owner information.
+The `get` command retrieves detailed metadata for a file by its ID. The response
+includes the file name, MIME type, modification time, size, web link, parent
+folders, sharing status and owner information.
 
 #### Usage
 
 ```bash
-aux4 google drive get <fileId>
+aux4 google drive get <fileId> [--tokenFile <path>]
 ```
 
-fileId  The file ID (positional argument)
+fileId       The file ID (positional argument)
+--tokenFile  Where the OAuth token is stored (default: `~/.aux4.config/.oauth/google.json`)
 
 #### Example
 
